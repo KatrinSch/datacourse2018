@@ -1,0 +1,43 @@
+--Exercise 06_04 but with raw_data instead of quality_controlled 
+
+select percday.cnt, name, mean_temp, min_temp, max_temp, mean_light, mean_dark, perc_day, perc_night  from 
+          (select count(distinct hobo.hobo_id) as cnt, districts.name as name, avg(raw_data.temperature) as mean_temp, min(raw_data.temperature) as min_temp, max(raw_data.temperature) as max_temp
+          from hobo
+          join districts on st_within(hobo.geom, districts.geom)
+          join raw_data on raw_data.hobo_id=hobo.hobo_id and raw_data.tstamp > '2018-06-06'
+          where year = 2019
+          group by districts.name) as tb1
+        
+          INNER JOIN(
+          select count(distinct hobo.hobo_id) as cnt, percentile_disc(0.9) within group (order by raw_data.temperature asc) as perc_day
+          from hobo
+          join districts on st_within(hobo.geom, districts.geom)
+          join raw_data on raw_data.hobo_id=hobo.hobo_id and raw_data.tstamp > '2018-06-06'
+          where year = 2019 and (date_part('hour', raw_data.tstamp) >= 6 and date_part('hour', raw_data.tstamp) < 18 )
+          group by districts.name) as percday on (tb1.cnt = percday.cnt)
+        
+          INNER JOIN(
+          select count(distinct hobo.hobo_id) as cnt, percentile_disc(0.9) within group (order by raw_data.temperature asc) as perc_night
+          from hobo
+          join districts on st_within(hobo.geom, districts.geom)
+          join raw_data on raw_data.hobo_id=hobo.hobo_id and raw_data.tstamp > '2018-06-06'
+          where year = 2019 and (date_part('hour', raw_data.tstamp) < 6 or date_part('hour', raw_data.tstamp) >= 18 )
+          group by districts.name) as percnht on (tb1.cnt = percnht.cnt)
+          
+          INNER JOIN(
+          select count(distinct hobo.hobo_id) as cnt, avg(raw_data.temperature) as mean_light
+          from hobo
+          join districts on st_within(hobo.geom, districts.geom)
+          join raw_data on raw_data.hobo_id=hobo.hobo_id and raw_data.tstamp > '2018-06-06'
+          where year = 2019 and (raw_data.light >= 0 and raw_data.light <= 290.6) --quartiles calculated before
+          group by districts.name) as meanlight on (tb1.cnt = meanlight.cnt)
+          
+          INNER JOIN(
+          select count(distinct hobo.hobo_id) as cnt, avg(raw_data.temperature) as mean_dark
+          from hobo
+          join districts on st_within(hobo.geom, districts.geom)
+          join raw_data on raw_data.hobo_id=hobo.hobo_id and raw_data.tstamp > '2018-06-06'
+          where year = 2019 and raw_data.light = 0 
+          group by districts.name) as meandark on (tb1.cnt = meandark.cnt)
+          
+where tb1.cnt > 3
